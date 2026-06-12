@@ -1,0 +1,276 @@
+<style>
+  #plugin-files { padding-bottom: 28px; }
+
+  #plugin-files .f-bar {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 12px;
+  }
+  #plugin-files .f-up {
+    flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--card); color: var(--txt);
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    transition: transform .12s, background .2s; padding: 0;
+  }
+  #plugin-files .f-up:active { transform: scale(.92); background: var(--card-hi); }
+  #plugin-files .f-up:disabled { opacity: .4; pointer-events: none; }
+  #plugin-files .f-up svg { width: 18px; height: 18px; }
+  #plugin-files .f-path {
+    flex: 1; min-width: 0; font-size: 12.5px; color: var(--dim);
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 11px 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    direction: rtl; text-align: left;
+  }
+  #plugin-files .f-upload {
+    flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--accent); color: #06120f;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0;
+    transition: transform .12s;
+  }
+  #plugin-files .f-upload:active { transform: scale(.92); }
+  #plugin-files .f-upload svg { width: 18px; height: 18px; }
+  #plugin-files .f-upload.hidden { display: none; }
+
+  #plugin-files .f-roots { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  #plugin-files .f-root {
+    padding: 8px 13px; border-radius: 11px; border: 1px solid var(--line);
+    background: var(--card); color: var(--txt); font-size: 13px; cursor: pointer;
+    font-family: inherit; transition: transform .12s, background .2s;
+  }
+  #plugin-files .f-root:active { transform: scale(.95); background: var(--card-hi); }
+
+  #plugin-files .f-list { display: flex; flex-direction: column; gap: 4px; }
+  #plugin-files .f-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px 13px;
+    border-radius: 12px; background: var(--card); border: 1px solid transparent;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  #plugin-files .f-item:active { background: var(--card-hi); }
+  #plugin-files .f-item.armed { border-color: var(--like, #ff5d73); background: rgba(255,93,115,.08); }
+  #plugin-files .f-ic {
+    flex-shrink: 0; width: 34px; height: 34px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  #plugin-files .f-ic svg { width: 18px; height: 18px; }
+  #plugin-files .f-ic.file { background: rgba(255,255,255,.06); color: var(--dim); }
+  #plugin-files .f-info { flex: 1; min-width: 0; }
+  #plugin-files .f-name {
+    font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #plugin-files .f-meta { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
+  #plugin-files .f-act {
+    flex-shrink: 0; display: flex; gap: 6px; align-items: center;
+  }
+  #plugin-files .f-mini {
+    width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line);
+    background: transparent; color: var(--txt); display: flex; align-items: center;
+    justify-content: center; cursor: pointer; padding: 0; text-decoration: none;
+    transition: transform .12s, background .2s;
+  }
+  #plugin-files .f-mini:active { transform: scale(.9); background: var(--card-hi); }
+  #plugin-files .f-mini svg { width: 15px; height: 15px; }
+  #plugin-files .f-mini.danger { color: var(--like, #ff5d73); border-color: transparent; }
+
+  #plugin-files .f-empty { text-align: center; color: var(--dim); padding: 40px 16px; font-size: 14px; }
+  #plugin-files .f-hint { font-size: 11.5px; color: var(--dim); margin: 0 2px 10px; }
+
+  #plugin-files .f-toast {
+    position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%) translateY(20px);
+    background: var(--card-hi); color: var(--txt); border: 1px solid var(--line);
+    padding: 11px 18px; border-radius: 14px; font-size: 14px; z-index: 75;
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+    max-width: 80%; text-align: center;
+  }
+  #plugin-files .f-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+
+<div class="f-roots" id="fRoots"></div>
+
+<div class="f-bar">
+  <button class="f-up" id="fUp" title="Вверх" disabled>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+  </button>
+  <div class="f-path" id="fPath">—</div>
+  <button class="f-upload" id="fUpload" title="Загрузить файл сюда">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V7M6 13l6-6 6 6M5 21h14"/></svg>
+  </button>
+  <input type="file" id="fFile" style="display:none;" multiple>
+</div>
+
+<div class="f-hint">Тап по папке — открыть. Тап по файлу — открыть на ПК. Двойной тап по корзине — удалить.</div>
+
+<div class="f-list" id="fList"></div>
+<div class="f-empty" id="fEmpty" style="display:none;">Папка пуста</div>
+
+<div class="f-toast" id="fToast"></div>
+
+<script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+  const BASE = '/plugin/files';
+  let curPath = null;
+  let parentPath = null;
+  let uploadsOk = true;
+  let armedPath = null, armTimer = null;
+
+  const IC = {
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+    file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>',
+    dl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>',
+    del: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>',
+    open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3h7v7M21 3l-9 9M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg>'
+  };
+
+  function toast(t){
+    const el = $('fToast'); if(!el) return;
+    el.textContent = t; el.classList.add('show');
+    clearTimeout(el._tm); el._tm = setTimeout(() => el.classList.remove('show'), 2400);
+  }
+  function send(o){ if(window.HelmSend) window.HelmSend(Object.assign({plugin:'files'}, o)); }
+  function fmtSize(b){
+    if(!b) return '';
+    if(b < 1024) return b + ' Б';
+    if(b < 1048576) return (b/1024).toFixed(0) + ' КБ';
+    if(b < 1073741824) return (b/1048576).toFixed(1) + ' МБ';
+    return (b/1073741824).toFixed(2) + ' ГБ';
+  }
+  function disarm(){
+    armedPath = null; clearTimeout(armTimer);
+    document.querySelectorAll('#plugin-files .f-item.armed').forEach(el => el.classList.remove('armed'));
+  }
+
+  function renderRoots(roots){
+    const wrap = $('fRoots'); wrap.innerHTML = '';
+    roots.forEach(r => {
+      const b = document.createElement('button');
+      b.className = 'f-root'; b.textContent = r.name;
+      b.addEventListener('click', () => { disarm(); openPath(r.path); });
+      wrap.appendChild(b);
+    });
+  }
+
+  function openPath(path){
+    send({cmd:'list', path: path});
+    toast('Открываю…');
+  }
+
+  function renderList(data){
+    curPath = data.path; parentPath = data.parent;
+    $('fPath').textContent = data.path;
+    $('fUp').disabled = !data.parent;
+    disarm();
+    const list = $('fList'); list.innerHTML = '';
+    const entries = data.entries || [];
+    if(!entries.length){ $('fEmpty').style.display = 'block'; }
+    else { $('fEmpty').style.display = 'none'; }
+    if(data.error) toast(data.error);
+
+    entries.forEach(e => {
+      const item = document.createElement('div');
+      item.className = 'f-item';
+      const ic = document.createElement('span');
+      ic.className = 'f-ic' + (e.is_dir ? '' : ' file');
+      ic.innerHTML = e.is_dir ? IC.folder : IC.file;
+      const info = document.createElement('div'); info.className = 'f-info';
+      const nm = document.createElement('div'); nm.className = 'f-name'; nm.textContent = e.name;
+      const meta = document.createElement('div'); meta.className = 'f-meta';
+      meta.textContent = e.is_dir ? 'папка' : fmtSize(e.size);
+      info.appendChild(nm); info.appendChild(meta);
+      item.appendChild(ic); item.appendChild(info);
+
+      const act = document.createElement('div'); act.className = 'f-act';
+      if(!e.is_dir){
+        const op = document.createElement('button');
+        op.className = 'f-mini'; op.innerHTML = IC.open; op.title = 'Открыть на ПК';
+        op.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          send({cmd:'open', path: e.path});
+          toast('Открываю на ПК…');
+        });
+        act.appendChild(op);
+        const dl = document.createElement('a');
+        dl.className = 'f-mini'; dl.innerHTML = IC.dl; dl.title = 'Скачать на телефон';
+        dl.href = BASE + '/download?path=' + encodeURIComponent(e.path);
+        dl.setAttribute('download', e.name); dl.target = '_blank'; dl.rel = 'noopener';
+        dl.addEventListener('click', (ev) => ev.stopPropagation());
+        act.appendChild(dl);
+      }
+      const del = document.createElement('button');
+      del.className = 'f-mini danger'; del.innerHTML = IC.del; del.title = 'Удалить';
+      del.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if(armedPath === e.path){
+          send({cmd:'delete', path: e.path});
+          toast('Удаляю ' + e.name + '…'); disarm();
+        } else {
+          disarm(); armedPath = e.path; item.classList.add('armed');
+          clearTimeout(armTimer); armTimer = setTimeout(disarm, 3500);
+          toast('Ещё раз — удалить');
+        }
+      });
+      act.appendChild(del);
+      item.appendChild(act);
+
+      // тап по строке: папка — открыть в браузере; файл — открыть на ПК
+      if(e.is_dir){
+        item.addEventListener('click', () => { disarm(); openPath(e.path); });
+      } else {
+        item.addEventListener('click', () => {
+          send({cmd:'open', path: e.path});
+          toast('Открываю на ПК…');
+        });
+      }
+      list.appendChild(item);
+    });
+  }
+
+  // загрузка файлов в текущую папку
+  async function uploadFiles(files){
+    if(!curPath){ toast('Сначала откройте папку'); return; }
+    for(const f of files){
+      const fd = new FormData();
+      fd.append('dir', curPath);
+      fd.append('file', f, f.name);
+      try{
+        const r = await fetch(BASE + '/upload', { method:'POST', body: fd });
+        const j = await r.json().catch(() => ({}));
+        if(!r.ok || !j.ok) toast('Ошибка: ' + (j.error || r.status));
+        else toast('Загружено: ' + f.name);
+      }catch(e){ toast('Сбой загрузки'); }
+    }
+    // обновить список
+    if(curPath) send({cmd:'list', path: curPath});
+  }
+
+  $('fUp').addEventListener('click', () => { if(parentPath){ disarm(); openPath(parentPath); } });
+  $('fUpload').addEventListener('click', () => $('fFile').click());
+  $('fFile').addEventListener('change', (e) => {
+    if(e.target.files && e.target.files.length) uploadFiles(e.target.files);
+    e.target.value = '';
+  });
+
+  window.HelmPlugins = window.HelmPlugins || {};
+  window.HelmPlugins['files'] = {
+    onMessage: (msg) => {
+      if(msg.type === 'files_roots'){
+        renderRoots(msg.roots);
+        uploadsOk = msg.uploads_ok !== false;
+        $('fUpload').classList.toggle('hidden', !uploadsOk);
+      } else if(msg.type === 'files_list'){
+        renderList(msg);
+      } else if(msg.type === 'files_error'){
+        toast(msg.message || 'Ошибка');
+      } else if(msg.type === 'files_result'){
+        if(!msg.ok){ toast('Не удалось: ' + (msg.message || '')); return; }
+        if(msg.action === 'open'){
+          toast('Открыто на ПК');
+        } else {
+          toast('Удалено');
+          if(curPath) send({cmd:'list', path: curPath});
+        }
+      }
+    },
+    onShow: () => { send({cmd:'roots'}); },
+    onHide: () => { disarm(); }
+  };
+})();
+</script>

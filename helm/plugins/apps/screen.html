@@ -1,0 +1,196 @@
+<style>
+  /* Заскоуплено под #plugin-apps, наследует тему Helm. */
+  #plugin-apps { padding-bottom: 24px; }
+  #plugin-apps .a-hint {
+    font-size: 13px; color: var(--dim); margin: 4px 2px 16px; line-height: 1.5;
+  }
+  #plugin-apps .a-grid { display: block; }
+  #plugin-apps .a-grid-inner {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  }
+  #plugin-apps .a-section {
+    font-size: 12px; color: var(--dim); margin: 18px 2px 10px; font-weight: 600;
+  }
+  #plugin-apps .a-grid-inner:first-child + .a-section,
+  #plugin-apps .a-section:first-child { margin-top: 0; }
+  #plugin-apps .a-star {
+    position: absolute; top: 6px; left: 6px; width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--dim); border-radius: 8px; z-index: 2;
+  }
+  #plugin-apps .a-star.on { color: #fbbf24; }
+  #plugin-apps .a-star svg { width: 15px; height: 15px; }
+  #plugin-apps .a-star:active { transform: scale(.85); }
+  #plugin-apps .a-tile {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 18px 10px; text-align: center; font-family: inherit;
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    color: var(--txt); cursor: pointer;
+    transition: transform .14s, background .2s;
+  }
+  #plugin-apps .a-tile:active { transform: scale(.94); background: var(--card-hi); }
+  #plugin-apps .a-tile.running { border-color: var(--accent); }
+  #plugin-apps .a-ic {
+    width: 46px; height: 46px; border-radius: 13px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--accent-soft); font-size: 24px; line-height: 1;
+  }
+  #plugin-apps .a-name {
+    font-size: 13px; font-weight: 500; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+  }
+  /* Точка «работает» */
+  #plugin-apps .a-dot {
+    position: absolute; top: 9px; left: 9px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 3px var(--card);
+  }
+  /* Кнопка закрытия в углу плитки (только у запущенных) */
+  #plugin-apps .a-close {
+    position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
+    border-radius: 8px; border: none; background: rgba(255,93,115,.16);
+    color: var(--like, #ff5d73); display: flex; align-items: center;
+    justify-content: center; cursor: pointer; padding: 0;
+    transition: transform .12s, background .2s;
+  }
+  #plugin-apps .a-close:active { transform: scale(.88); background: rgba(255,93,115,.3); }
+  #plugin-apps .a-close svg { width: 14px; height: 14px; }
+  #plugin-apps .a-tile.launching { opacity: .5; pointer-events: none; }
+  #plugin-apps .a-empty {
+    text-align: center; color: var(--dim); padding: 50px 16px; font-size: 15px;
+    line-height: 1.6;
+  }
+  #plugin-apps .a-toast {
+    position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%) translateY(20px);
+    background: var(--card-hi); color: var(--txt); border: 1px solid var(--line);
+    padding: 11px 18px; border-radius: 14px; font-size: 14px; z-index: 75;
+    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+    max-width: 80%; text-align: center;
+  }
+  #plugin-apps .a-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+
+<div class="a-hint">
+  Тап — запуск программы на ПК. У запущенных горит точка и крестик — тап по
+  крестику закрывает. Список задаётся в <code>plugins/apps/apps_config.py</code>.
+</div>
+
+<div class="a-grid" id="aGrid"></div>
+<div class="a-empty" id="aEmpty" style="display:none;">
+  Список пуст.<br>Добавь приложения в apps_config.py на ПК.
+</div>
+
+<div class="a-toast" id="aToast"></div>
+
+<script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+  const grid = $('aGrid');
+
+  function toast(text){
+    const t = $('aToast'); if(!t) return;
+    t.textContent = text; t.classList.add('show');
+    clearTimeout(t._tm); t._tm = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+
+  function makeTile(a){
+    const tile = document.createElement('button');
+    tile.className = 'a-tile' + (a.running ? ' running' : '');
+
+    const ic = document.createElement('span');
+    ic.className = 'a-ic'; ic.textContent = a.icon || '▣';
+    const nm = document.createElement('span');
+    nm.className = 'a-name'; nm.textContent = a.name;
+    tile.appendChild(ic); tile.appendChild(nm);
+
+    // звезда избранного (тап — переключить, не запускать)
+    const star = document.createElement('span');
+    star.className = 'a-star' + (a.favorite ? ' on' : '');
+    star.innerHTML = a.favorite
+      ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.3 3.2L7 14.2l-5-4.8 7-.9z"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l3 6.5 7 .9-5 4.8 1.3 7L12 18l-6.3 3.2L7 14.2l-5-4.8 7-.9z"/></svg>';
+    star.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if(window.HelmSend) window.HelmSend({ plugin: 'apps', cmd: 'favorite', id: a.id });
+    });
+    tile.appendChild(star);
+
+    if(a.running){
+      const dot = document.createElement('span');
+      dot.className = 'a-dot'; tile.appendChild(dot);
+      const close = document.createElement('button');
+      close.className = 'a-close';
+      close.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+      close.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if(window.HelmSend) window.HelmSend({ plugin: 'apps', cmd: 'close', id: a.id });
+        toast(a.name + ': закрываю…');
+      });
+      tile.appendChild(close);
+    }
+
+    tile.addEventListener('click', () => {
+      if(window.HelmSend) window.HelmSend({ plugin: 'apps', cmd: 'launch', id: a.id });
+      toast(a.name + ': запуск…');
+      tile.classList.add('launching');
+      setTimeout(() => tile.classList.remove('launching'), 1200);
+    });
+    return tile;
+  }
+
+  function renderApps(apps){
+    grid.innerHTML = '';
+    if(!apps || !apps.length){
+      $('aEmpty').style.display = 'block';
+      return;
+    }
+    $('aEmpty').style.display = 'none';
+
+    const favs = apps.filter(a => a.favorite);
+    // Избранное — отдельной секцией сверху, если есть.
+    if(favs.length){
+      const favTitle = document.createElement('div');
+      favTitle.className = 'a-section'; favTitle.textContent = 'Избранное';
+      grid.appendChild(favTitle);
+      const favWrap = document.createElement('div');
+      favWrap.className = 'a-grid-inner';
+      favs.forEach(a => favWrap.appendChild(makeTile(a)));
+      grid.appendChild(favWrap);
+
+      const allTitle = document.createElement('div');
+      allTitle.className = 'a-section'; allTitle.textContent = 'Все приложения';
+      grid.appendChild(allTitle);
+    }
+    const allWrap = document.createElement('div');
+    allWrap.className = 'a-grid-inner';
+    apps.forEach(a => allWrap.appendChild(makeTile(a)));
+    grid.appendChild(allWrap);
+  }
+
+  function requestList(){
+    if(window.HelmSend) window.HelmSend({ plugin: 'apps', cmd: 'sync' });
+  }
+
+  let refreshTimer = null;
+
+  // Регистрация в ядре Helm.
+  window.HelmPlugins = window.HelmPlugins || {};
+  window.HelmPlugins['apps'] = {
+    onMessage: (msg) => {
+      if(msg.type === 'apps_list'){ renderApps(msg.apps); }
+      else if(msg.type === 'app_result'){
+        if(!msg.ok) toast('Не удалось: ' + (msg.message || msg.id));
+        else if(msg.action === 'close') toast('Закрыто');
+      }
+    },
+    onShow: () => {
+      requestList();
+      // Пока раздел открыт — обновляем статусы «работает» раз в 4 сек.
+      clearInterval(refreshTimer);
+      refreshTimer = setInterval(requestList, 4000);
+    },
+    onHide: () => { clearInterval(refreshTimer); }
+  };
+})();
+</script>

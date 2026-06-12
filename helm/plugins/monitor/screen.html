@@ -1,0 +1,443 @@
+<style>
+  /* Все стили заскоуплены под #plugin-monitor — не влияют на оболочку Helm. */
+  #plugin-monitor {
+    --m-accent: var(--accent);
+    --m-warn: #e0a030;
+    --m-crit: #ff5d73;
+    --m-card: var(--card);
+    --m-line: var(--line);
+    --m-dim: var(--dim);
+    --m-txt: var(--txt);
+    padding-bottom: 24px;
+  }
+  #plugin-monitor .m-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  #plugin-monitor .m-card {
+    background: var(--m-card); border: 1px solid var(--m-line);
+    border-radius: 18px; padding: 16px;
+  }
+  #plugin-monitor .m-card.wide { grid-column: 1 / -1; }
+  #plugin-monitor .m-title {
+    font-size: 12px; color: var(--m-dim); text-transform: uppercase;
+    letter-spacing: .6px; margin-bottom: 10px;
+  }
+  #plugin-monitor .m-big {
+    font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+  #plugin-monitor .m-unit { font-size: 14px; color: var(--m-dim); font-weight: 500; }
+  #plugin-monitor .m-sub { font-size: 13px; color: var(--m-dim); margin-top: 6px; }
+
+  /* Кольцо CPU */
+  #plugin-monitor .m-ring-wrap { display: flex; align-items: center; gap: 16px; }
+  #plugin-monitor .m-ring { position: relative; width: 84px; height: 84px; flex-shrink: 0; }
+  #plugin-monitor .m-ring svg { transform: rotate(-90deg); }
+  #plugin-monitor .m-ring .val {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 19px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Полоса (RAM/диск) */
+  #plugin-monitor .m-bar {
+    height: 9px; border-radius: 6px; background: var(--m-line); overflow: hidden; margin-top: 4px;
+  }
+  #plugin-monitor .m-bar > i {
+    display: block; height: 100%; width: 0%;
+    background: var(--m-accent); border-radius: 6px;
+    transition: width .5s ease, background .3s ease;
+  }
+
+  /* Ядра CPU */
+  #plugin-monitor .m-cores {
+    display: flex; gap: 3px; align-items: flex-end; height: 36px; margin-top: 4px;
+  }
+  #plugin-monitor .m-cores > i {
+    flex: 1; min-width: 3px; background: var(--m-accent); border-radius: 2px;
+    height: 4%; transition: height .4s ease, background .3s ease; opacity: .9;
+  }
+
+  /* Строки показателей */
+  #plugin-monitor .m-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 0; border-bottom: 1px solid var(--m-line); font-size: 14px;
+  }
+  #plugin-monitor .m-row:last-child { border-bottom: 0; }
+  #plugin-monitor .m-row .k { color: var(--m-dim); }
+  #plugin-monitor .m-row .v { font-variant-numeric: tabular-nums; }
+
+  #plugin-monitor canvas.m-spark {
+    width: 100%; height: 48px; display: block; margin-top: 8px;
+  }
+  #plugin-monitor canvas.m-spark.small { height: 34px; margin-top: 6px; }
+
+  #plugin-monitor .m-proc {
+    display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 13px;
+    cursor: pointer; border-radius: 8px; transition: background .15s;
+  }
+  #plugin-monitor .m-proc:active { background: var(--card-hi, rgba(255,255,255,.06)); }
+  #plugin-monitor .m-proc .pkill {
+    flex-shrink: 0; width: 22px; height: 22px; opacity: 0; color: var(--m-crit);
+    display: flex; align-items: center; justify-content: center;
+    transition: opacity .15s;
+  }
+  #plugin-monitor .m-proc.armed .pkill { opacity: 1; }
+  #plugin-monitor .m-proc.armed { background: rgba(255,93,115,0.12); }
+  #plugin-monitor .m-proc .pkill svg { width: 15px; height: 15px; }
+  #plugin-monitor .m-proc-hint {
+    font-size: 11px; color: var(--m-dim); margin: 2px 0 8px;
+  }
+  #plugin-monitor .m-proc .pname {
+    flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #plugin-monitor .m-proc .pcpu { color: var(--m-accent); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+  #plugin-monitor .m-proc .pmem { color: var(--m-dim); font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; font-size: 12px; }
+  #plugin-monitor .m-na { color: var(--m-dim); font-style: italic; }
+  #plugin-monitor .m-offline {
+    text-align: center; color: var(--m-dim); padding: 40px 0; font-size: 15px;
+  }
+</style>
+
+<div class="m-offline" id="mOffline" style="display:none;">Ожидаю данные с ПК…</div>
+
+<div class="m-grid" id="mGrid">
+  <!-- CPU -->
+  <div class="m-card">
+    <div class="m-title">Процессор</div>
+    <div class="m-ring-wrap">
+      <div class="m-ring">
+        <svg width="84" height="84" viewBox="0 0 84 84">
+          <circle cx="42" cy="42" r="36" fill="none" stroke="rgba(255,255,255,0.10)" stroke-width="8"/>
+          <circle id="mCpuArc" cx="42" cy="42" r="36" fill="none" stroke="var(--m-accent)"
+                  stroke-width="8" stroke-linecap="round"
+                  stroke-dasharray="226" stroke-dashoffset="226"
+                  style="transition:stroke-dashoffset .5s ease, stroke .3s ease;"/>
+        </svg>
+        <div class="val" id="mCpuVal">—</div>
+      </div>
+      <div>
+        <div class="m-sub" id="mCpuMhz">— МГц</div>
+        <div class="m-cores" id="mCores"></div>
+      </div>
+    </div>
+    <canvas class="m-spark" id="mSpark"></canvas>
+  </div>
+
+  <!-- RAM -->
+  <div class="m-card">
+    <div class="m-title">Память</div>
+    <div class="m-big"><span id="mMemPct">—</span><span class="m-unit">%</span></div>
+    <div class="m-bar"><i id="mMemBar"></i></div>
+    <div class="m-sub" id="mMemSub">—</div>
+    <canvas class="m-spark small" id="mMemSpark"></canvas>
+    <div class="m-title" style="margin-top:14px;">Подкачка</div>
+    <div class="m-bar"><i id="mSwapBar"></i></div>
+    <div class="m-sub" id="mSwapSub">—</div>
+  </div>
+
+  <!-- Сеть и диск -->
+  <div class="m-card">
+    <div class="m-title">Сеть</div>
+    <div class="m-row"><span class="k">↓ приём</span><span class="v" id="mNetDown">—</span></div>
+    <div class="m-row"><span class="k">↑ отдача</span><span class="v" id="mNetUp">—</span></div>
+    <canvas class="m-spark small" id="mNetSpark"></canvas>
+    <div class="m-title" style="margin-top:14px;">Диск (актив.)</div>
+    <div class="m-row"><span class="k">чтение</span><span class="v" id="mDiskR">—</span></div>
+    <div class="m-row"><span class="k">запись</span><span class="v" id="mDiskW">—</span></div>
+    <canvas class="m-spark small" id="mDiskSpark"></canvas>
+  </div>
+
+  <!-- Система -->
+  <div class="m-card">
+    <div class="m-title">Система</div>
+    <div class="m-row"><span class="k">Температура</span><span class="v" id="mTemp">—</span></div>
+    <div class="m-row"><span class="k">Батарея</span><span class="v" id="mBatt">—</span></div>
+    <div class="m-row"><span class="k">Аптайм</span><span class="v" id="mUptime">—</span></div>
+  </div>
+
+  <!-- Диски -->
+  <div class="m-card wide">
+    <div class="m-title">Накопители</div>
+    <div id="mDisks"></div>
+  </div>
+
+  <!-- Топ процессов -->
+  <div class="m-card wide">
+    <div class="m-title">Самые активные процессы</div>
+    <div class="m-proc-hint">Тап — выбрать процесс, ещё раз — завершить</div>
+    <div id="mTop"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+  const HIST_MAX = 60;
+  // Истории для спарклайнов: проценты (0..100) или абсолютные значения (байты/с).
+  const hist = {
+    cpu:  { data: [], max: 100 },          // фикс. шкала 0..100
+    mem:  { data: [], max: 100 },          // фикс. шкала 0..100
+    net:  { data: [], max: null },         // авто-шкала (сумма up+down)
+    disk: { data: [], max: null },         // авто-шкала (сумма r+w)
+  };
+  function pushHist(key, val){
+    const h = hist[key]; if(!h) return;
+    h.data.push(val); if(h.data.length > HIST_MAX) h.data.shift();
+  }
+
+  function fmtBytes(b){
+    if(b == null) return '—';
+    if(b < 1024) return b.toFixed(0) + ' Б';
+    if(b < 1024*1024) return (b/1024).toFixed(1) + ' КБ';
+    if(b < 1024*1024*1024) return (b/1024/1024).toFixed(1) + ' МБ';
+    return (b/1024/1024/1024).toFixed(2) + ' ГБ';
+  }
+  function fmtRate(b){ return fmtBytes(b) + '/с'; }
+  function fmtGB(b){ return (b/1e9).toFixed(1) + ' ГБ'; }
+  function fmtUptime(s){
+    if(s == null) return '—';
+    const d = Math.floor(s/86400), h = Math.floor((s%86400)/3600), m = Math.floor((s%3600)/60);
+    if(d > 0) return d + 'д ' + h + 'ч';
+    if(h > 0) return h + 'ч ' + m + 'м';
+    return m + 'м';
+  }
+  function colorFor(pct){
+    if(pct >= 90) return 'var(--m-crit)';
+    if(pct >= 70) return 'var(--m-warn)';
+    return 'var(--m-accent)';
+  }
+
+  function accentColor(){
+    let accent = '#5eead4';
+    try {
+      const root = document.getElementById('plugin-monitor') || document.body;
+      const c = getComputedStyle(root).getPropertyValue('--m-accent').trim()
+             || getComputedStyle(document.body).getPropertyValue('--accent').trim();
+      if(c) accent = c;
+    } catch(e){}
+    return accent;
+  }
+
+  function drawSparkInto(canvasId, key){
+    const cv = $(canvasId); if(!cv) return;
+    const h = hist[key]; if(!h) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, ht = cv.clientHeight;
+    if(w === 0) return;
+    cv.width = w*dpr; cv.height = ht*dpr;
+    const ctx = cv.getContext('2d'); ctx.scale(dpr, dpr);
+    ctx.clearRect(0,0,w,ht);
+    const d = h.data;
+    if(d.length < 2) return;
+    // Шкала: фиксированная (проценты) или авто (по максимуму в окне).
+    let scale = h.max;
+    if(scale == null){ scale = Math.max(1, Math.max.apply(null, d)); }
+    const accent = accentColor();
+    const step = w / (HIST_MAX - 1);
+    ctx.beginPath();
+    for(let i=0;i<d.length;i++){
+      const x = i*step, y = ht - Math.min(1, d[i]/scale)*ht;
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.stroke();
+    ctx.lineTo((d.length-1)*step, ht); ctx.lineTo(0, ht); ctx.closePath();
+    const g = ctx.createLinearGradient(0,0,0,ht);
+    g.addColorStop(0, accent + '40'); g.addColorStop(1, accent + '00');
+    ctx.fillStyle = g; ctx.fill();
+  }
+
+  function render(m){
+    if(!m || !m.available){
+      $('mOffline').style.display = 'block';
+      $('mOffline').textContent = m && m.available === false
+        ? 'Мониторинг недоступен (нет psutil на ПК)' : 'Ожидаю данные с ПК…';
+      $('mGrid').style.display = 'none';
+      return;
+    }
+    $('mOffline').style.display = 'none';
+    $('mGrid').style.display = 'grid';
+
+    // CPU
+    const cpu = Math.round(m.cpu.total);
+    $('mCpuVal').textContent = cpu + '%';
+    const arc = $('mCpuArc'); const C = 226;
+    arc.style.strokeDashoffset = (C - C*cpu/100).toFixed(1);
+    arc.style.stroke = colorFor(cpu);
+    $('mCpuMhz').textContent = m.cpu.mhz ? (m.cpu.mhz + ' МГц') : '';
+    // ядра
+    const cores = $('mCores');
+    if(cores.children.length !== m.cpu.cores.length){
+      cores.innerHTML = '';
+      m.cpu.cores.forEach(() => cores.appendChild(document.createElement('i')));
+    }
+    m.cpu.cores.forEach((c,i) => {
+      const bar = cores.children[i];
+      bar.style.height = Math.max(4, c) + '%';
+      bar.style.background = colorFor(c);
+    });
+    // спарклайн CPU
+    pushHist('cpu', cpu);
+    drawSparkInto('mSpark', 'cpu');
+
+    // RAM
+    $('mMemPct').textContent = Math.round(m.mem.percent);
+    const mb = $('mMemBar'); mb.style.width = m.mem.percent + '%'; mb.style.background = colorFor(m.mem.percent);
+    $('mMemSub').textContent = fmtGB(m.mem.used) + ' / ' + fmtGB(m.mem.total);
+    pushHist('mem', m.mem.percent);
+    drawSparkInto('mMemSpark', 'mem');
+    const sb = $('mSwapBar'); sb.style.width = m.swap.percent + '%'; sb.style.background = colorFor(m.swap.percent);
+    $('mSwapSub').textContent = fmtGB(m.swap.used) + ' / ' + fmtGB(m.swap.total);
+
+    // Сеть/диск
+    $('mNetDown').textContent = fmtRate(m.net_rate.down);
+    $('mNetUp').textContent = fmtRate(m.net_rate.up);
+    $('mDiskR').textContent = fmtRate(m.disk_rate.read);
+    $('mDiskW').textContent = fmtRate(m.disk_rate.write);
+    pushHist('net', (m.net_rate.down || 0) + (m.net_rate.up || 0));
+    drawSparkInto('mNetSpark', 'net');
+    pushHist('disk', (m.disk_rate.read || 0) + (m.disk_rate.write || 0));
+    drawSparkInto('mDiskSpark', 'disk');
+
+    // Система
+    if(m.temp == null){ $('mTemp').innerHTML = '<span class="m-na">н/д</span>'; }
+    else {
+      const src = m.temp_src ? ' <span style="color:var(--m-dim);font-size:11px;">' + m.temp_src + '</span>' : '';
+      $('mTemp').innerHTML = m.temp + ' °C' + src;
+    }
+    if(m.battery == null){ $('mBatt').innerHTML = '<span class="m-na">н/д</span>'; }
+    else {
+      const b = m.battery;
+      $('mBatt').textContent = b.percent + '%' + (b.plugged ? ' ⚡' : '');
+    }
+    $('mUptime').textContent = fmtUptime(m.uptime);
+
+    // Диски
+    const dwrap = $('mDisks');
+    dwrap.innerHTML = '';
+    (m.disks || []).forEach(d => {
+      const row = document.createElement('div');
+      row.innerHTML =
+        '<div class="m-row" style="border:0;padding-bottom:2px;">' +
+          '<span class="k">' + d.mount + '</span>' +
+          '<span class="v">' + fmtGB(d.used) + ' / ' + fmtGB(d.total) + ' · ' + Math.round(d.percent) + '%</span>' +
+        '</div>' +
+        '<div class="m-bar"><i style="width:' + d.percent + '%;background:' + colorFor(d.percent) + ';"></i></div>';
+      row.style.marginBottom = '10px';
+      dwrap.appendChild(row);
+    });
+
+    // Топ процессов — обновляем по pid (не пересоздаём список), чтобы строки
+    // не «прыгали» и не мигали при смене процентов.
+    renderProcs(m.top || []);
+  }
+
+  const KILL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  const procRows = new Map();   // pid -> { row, nameEl, cpuEl, memEl }
+
+  function renderProcs(top){
+    const twrap = $('mTop');
+    if(!twrap) return;
+    const seen = new Set();
+
+    // Создаём недостающие строки, вставляя их в порядке по PID (стабильно).
+    // PID процесса не меняется, поэтому строки получают постоянное место и
+    // НИКОГДА не прыгают. Каждый тик обновляем только цифры CPU/RAM.
+    top.forEach((p) => {
+      seen.add(p.pid);
+      let r = procRows.get(p.pid);
+      if(!r){
+        const row = document.createElement('div');
+        row.className = 'm-proc';
+        row.dataset.pid = p.pid;
+        const nameEl = document.createElement('span');
+        nameEl.className = 'pname'; nameEl.textContent = p.name;
+        const memEl = document.createElement('span'); memEl.className = 'pmem';
+        const cpuEl = document.createElement('span'); cpuEl.className = 'pcpu';
+        const kill = document.createElement('span');
+        kill.className = 'pkill'; kill.innerHTML = KILL_ICON;
+        row.appendChild(nameEl); row.appendChild(memEl);
+        row.appendChild(cpuEl); row.appendChild(kill);
+        row.addEventListener('click', () => onProcTap(row, parseInt(row.dataset.pid, 10), nameEl.textContent));
+        r = { row, nameEl, cpuEl, memEl };
+        procRows.set(p.pid, r);
+        // вставляем по возрастанию pid — фиксированное место
+        let ref = null;
+        for(const child of twrap.children){
+          if(parseInt(child.dataset.pid, 10) > p.pid){ ref = child; break; }
+        }
+        twrap.insertBefore(r.row, ref);
+      }
+      if(r.nameEl.textContent !== p.name) r.nameEl.textContent = p.name;
+      r.cpuEl.textContent = (p.cpu != null ? p.cpu.toFixed(0) : '0') + '%';
+      r.memEl.textContent = (p.mem != null ? p.mem.toFixed(0) : '0') + '% RAM';
+    });
+
+    // Удаляем исчезнувшие процессы.
+    for(const [pid, r] of procRows){
+      if(!seen.has(pid)){
+        if(armedPid === pid) disarm();
+        r.row.remove();
+        procRows.delete(pid);
+      }
+    }
+  }
+
+  let armedPid = null;       // pid процесса, выбранного к завершению
+  let armTimer = null;
+  function onProcTap(row, pid, name){
+    if(armedPid === pid){
+      // второй тап — завершаем
+      if(window.HelmSend) window.HelmSend({ plugin: 'monitor', cmd: 'kill', pid: pid });
+      toast('Завершаю ' + name + '…');
+      disarm();
+    } else {
+      // первый тап — взводим (показываем крестик), сбрасываем прежний
+      disarm();
+      armedPid = pid;
+      row.classList.add('armed');
+      clearTimeout(armTimer);
+      armTimer = setTimeout(disarm, 3500);   // авто-сброс, если не подтвердили
+    }
+  }
+  function disarm(){
+    armedPid = null;
+    clearTimeout(armTimer);
+    document.querySelectorAll('#plugin-monitor .m-proc.armed')
+      .forEach(el => el.classList.remove('armed'));
+  }
+
+  // мини-тост (у монитора своего не было — сделаем лёгкий через offline-плашку нельзя,
+  // поэтому создаём всплывашку)
+  function toast(text){
+    let t = document.getElementById('mToast');
+    if(!t){
+      t = document.createElement('div');
+      t.id = 'mToast';
+      t.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%) translateY(20px);'
+        + 'background:var(--card-hi,rgba(40,40,48,.95));color:var(--txt);border:1px solid var(--line);'
+        + 'padding:11px 18px;border-radius:14px;font-size:14px;z-index:75;opacity:0;pointer-events:none;'
+        + 'transition:opacity .25s,transform .25s;max-width:80%;text-align:center;';
+      document.body.appendChild(t);
+    }
+    t.textContent = text;
+    requestAnimationFrame(() => { t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)'; });
+    clearTimeout(t._tm);
+    t._tm = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(20px)'; }, 2400);
+  }
+
+  // Регистрируемся в ядре Helm.
+  window.HelmPlugins = window.HelmPlugins || {};
+  window.HelmPlugins['monitor'] = {
+    onMessage: (msg) => {
+      if(msg.type === 'metrics') render(msg);
+      else if(msg.type === 'kill_result'){
+        if(msg.ok) toast('Завершён: ' + (msg.message || msg.pid));
+        else toast('Не удалось: ' + (msg.message || msg.pid));
+      }
+    },
+    onShow: () => { if(window.HelmSend) window.HelmSend({ plugin: 'monitor', cmd: 'sync' }); },
+    onHide: () => { disarm(); }
+  };
+})();
+</script>
